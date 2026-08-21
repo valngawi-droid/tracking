@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0f1420" />
   <title>Hand Tracking — MediaPipe (Android)</title>
-  <link rel="stylesheet" href="style.css?v=4" />
+  <link rel="stylesheet" href="style.css?v=5" />
 </head>
 <body>
   <header>
-    <h1>🖐️ Hand Tracking</h1>
+    <h1>🖐️ Hand Tracking <span class="badge-title">Portal Filter</span></h1>
     <p class="sub">MediaPipe · berjalan 100% di HP (browser) — tanpa PC</p>
   </header>
 
@@ -28,8 +28,9 @@
       <div class="toolbar">
         <button id="btn-start">▶ Mulai Kamera</button>
         <button id="btn-switch" disabled>🔄 Ganti Kamera</button>
-        <button id="btn-snap" disabled>📸 Simpan Foto</button>
-        <button id="btn-demo" disabled>🧪 Uji Gambar</button>
+        <button id="btn-filter" disabled>🎨 Ganti Filter</button>
+        <button id="btn-snap" disabled>📸 Foto</button>
+        <button id="btn-demo" disabled>🧪 Uji</button>
       </div>
 
       <div class="switches">
@@ -39,6 +40,7 @@
 
       <div class="status">
         <span id="status">…</span>
+        <span id="filter-name">Filter: —</span>
         <span id="fps">FPS: —</span>
         <span id="latency">Latensi: —</span>
       </div>
@@ -48,13 +50,19 @@
       <h2>Hasil Deteksi</h2>
       <div id="hands"></div>
       <p id="empty" class="empty">Tunjukkan tangan ke kamera.</p>
+      <h2>Cara Pakai</h2>
+      <ul class="help">
+        <li>🟡 Titik kuning = ujung <b>jempol &amp; telunjuk</b></li>
+        <li>✋ <b>2 tangan</b> → 4 titik jadi <b>portal</b> berisi filter</li>
+        <li>🎨 Ganti filter: dekatkan ujung <b>telunjuk kedua tangan</b> — atau cubit <b>jempol + kelingking</b> (1 tangan)</li>
+      </ul>
     </aside>
   </main>
 
   <footer>
-    Frontend: MediaPipe JS (WASM) · Server: <b>PHP</b> di Termux · Tidak butuh PC
+    Frontend: MediaPipe JS (WASM) · Server: <b>PHP</b> di Termux · Filter: Mono, Dual-Tone, Pixelate, Invert, Sepia, Blur, Thermal, Sketch, Glitch, Neon, Galaxy
   </footer>
 
-  <script type="module" src="app.js?v=4"></script>
+  <script type="module" src="app.js?v=5"></script>
 </body>
 </html>
