@@ -56,12 +56,27 @@ Perintah berguna:
 
 ### Fitur versi HP
 
-- Kamera **depan/belakang** (tombol 🔄) + mode cermin otomatis.
-- Kerangka tangan **berwarna per jari** + titik landmark.
-- Deteksi **2 tangan** sekaligus, handedness (Kiri/Kanan), jumlah jari & gestur
+- Kamera **depan/belakang** (tombol 🔄) + mode cermin otomatis (default mati).
+- Kerangka tangan **berwarna per jari** + titik kuning di ujung jempol & telunjuk.
+- Deteksi **2 tangan**, handedness (Kiri/Kanan), jumlah jari & gestur
   (👍 Jempol, ✌️ Victory, ✊ Kepalan, 🖐️ Terbuka, 👌 OK, dll.).
+- **🟣 Portal Filter** (seperti referensi *Retrolens*): 2 tangan = 4 titik
+  (jempol & telunjuk tiap tangan) membentuk portal berisi filter —
+  Mono, Dual-Tone, Pixelate, Invert, Sepia, Blur, Thermal, Sketch, Glitch,
+  Neon, Galaxy.
+- **Ganti filter** lewat gestur: dekatkan ujung telunjuk kedua tangan, atau
+  cubit jempol + kelingking (1 tangan). Ada juga tombol 🎨 sebagai cadangan.
 - **🧪 Uji Gambar** — tes deteksi tanpa kamera (pakai gambar demo).
 - **📸 Simpan Foto** — unduh hasil tangkapan + overlay.
+
+### Catatan performa (jujur soal "fps")
+
+- Kameranya berjalan di **refresh rate layar** (60–120 Hz), dan overlay
+  di-**interpolasi** antar-deteksi sehingga gerakan tangan terlihat **mulus**.
+- Deteksi MediaPipe-nya sendiri ±30 frame/detik — terbatas kamera HP & model.
+  Di HP mana pun, angka "120 fps" untuk deteksi model **tidak realistis**;
+  yang realistis dan kami capai adalah **tampilan yang mulus** di layar
+  (render di refresh rate penuh, deteksi mengikuti laju kamera).
 
 > **Tips:** saat pertama kali, tekan **🧪 Uji Gambar** dulu untuk memastikan model
 > termuat dengan benar sebelum mengizinkan kamera.
