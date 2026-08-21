@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Tools lokal (tidak ikut di-commit)
+.tools/
+
+# Hasil unduhan / unggahan sementara
+image-search/
+uploads/
+*.log
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
