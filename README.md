@@ -24,7 +24,8 @@ Browser ──▶ PHP (index.php, api.php) ──▶ Python (Flask + MediaPipe H
 - **Handedness**: menebak tangan kiri/kanan + skor keyakinan.
 - **Pengenalan gestur sederhana** (jumlah jari terangkat): 👍 Jempol, ☝️ Satu,
   ✌️ Dua/Victory, 🤟 Tiga, ✊ Kepalan, 🖐️ Tangan terbuka, 👌 OK/Jepit.
-- Overlay **kerangka tangan** langsung di atas video/gambar.
+- Overlay **kerangka tangan** (garis-garis berwarna per jari + titik landmark)
+  langsung di atas video/gambar — sama seperti visualisasi hand-tracking pada umumnya.
 - Sumber input: **webcam**, **unggah gambar**, atau **gambar demo** bawaan.
 - Tampilan data mentah (JSON) di panel samping.
 

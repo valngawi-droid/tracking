@@ -28,14 +28,16 @@ const skeletonEl = document.getElementById('draw-skeleton');
 const W = canvas.width;   // 640
 const H = canvas.height;  // 480
 
-// Koneksi antar landmark (sama dengan MediaPipe HAND_CONNECTIONS).
-const HAND_CONNECTIONS = [
-  [0, 1], [1, 2], [2, 3], [3, 4],          // jempol
-  [0, 5], [5, 6], [6, 7], [7, 8],          // telunjuk
-  [5, 9], [9, 10], [10, 11], [11, 12],     // tengah
-  [9, 13], [13, 14], [14, 15], [15, 16],   // manis
-  [13, 17], [17, 18], [18, 19], [19, 20],  // kelingking
-  [0, 17],
+// Kerangka tangan (sama dengan MediaPipe HAND_CONNECTIONS), dikelompokkan
+// per jari agar tiap jari bisa diberi warna berbeda — garis "garis-garis"
+// di tangan jadi jelas terlihat seperti contoh hand-tracking pada umumnya.
+const HAND_PARTS = [
+  { color: '#22c55e', bones: [[0, 1], [1, 2], [2, 3], [3, 4]] },            // jempol  (hijau)
+  { color: '#00e5ff', bones: [[0, 5], [5, 6], [6, 7], [7, 8]] },            // telunjuk (cyan)
+  { color: '#fbbf24', bones: [[5, 9], [9, 10], [10, 11], [11, 12]] },       // tengah  (kuning)
+  { color: '#fb923c', bones: [[9, 13], [13, 14], [14, 15], [15, 16]] },     // manis   (oranye)
+  { color: '#c084fc', bones: [[13, 17], [17, 18], [18, 19], [19, 20]] },    // kelingking (ungu)
+  { color: '#ffffff', bones: [[0, 17]] },                                    // telapak (putih)
 ];
 
 const FINGER_TIPS = { jempol: 4, telunjuk: 8, tengah: 12, manis: 16, kelingking: 20 };
@@ -153,29 +155,34 @@ function drawHand(hand) {
   const fingers = hand.fingers || {};
 
   if (skeletonEl.checked) {
-    ctx.strokeStyle = 'rgba(0, 229, 255, 0.7)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (const [a, b] of HAND_CONNECTIONS) {
-      ctx.moveTo(lm[a].x * W, lm[a].y * H);
-      ctx.lineTo(lm[b].x * W, lm[b].y * H);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const part of HAND_PARTS) {
+      ctx.strokeStyle = part.color;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      for (const [a, b] of part.bones) {
+        ctx.moveTo(lm[a].x * W, lm[a].y * H);
+        ctx.lineTo(lm[b].x * W, lm[b].y * H);
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
   }
 
+  // Titik landmark: sendi putih, ujung jari lebih besar & berwarna
+  // (hijau = terangkat, merah = terlipat) — seperti penanda di contoh referensi.
   lm.forEach((p, i) => {
     const name = Object.keys(FINGER_TIPS).find(k => FINGER_TIPS[k] === i);
     const isTip = Boolean(name);
     const up = name ? fingers[name] : true;
+    const r = isTip ? 7 : 4;
     ctx.beginPath();
     ctx.fillStyle = isTip ? (up ? '#22c55e' : '#ef4444') : '#ffffff';
-    ctx.arc(p.x * W, p.y * H, isTip ? 6 : 3, 0, Math.PI * 2);
+    ctx.arc(p.x * W, p.y * H, r, 0, Math.PI * 2);
     ctx.fill();
-    if (isTip) {
-      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+    ctx.stroke();
   });
 
   // Label gestur di dekat pergelangan tangan.
@@ -212,6 +219,7 @@ async function trackFrame() {
       latencyEl.textContent =
         'Latensi: ' + (json.elapsed_ms || 0) + ' ms (AI) · ' + total.toFixed(0) + ' ms (total)';
       renderHands(json.hands);
+      drawOverlay(); // penting: tampilkan kerangka juga pada gambar statis (Demo/Unggah)
     }
   } catch (e) {
     setStatus('Gagal terhubung ke backend: ' + e.message, false);
