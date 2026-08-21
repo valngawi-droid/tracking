@@ -1,0 +1,6 @@
+# Backend Python — Hand Tracking dengan MediaPipe
+# Pasang dengan:  pip install -r requirements.txt
+mediapipe>=0.10.0
+flask>=3.0.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
