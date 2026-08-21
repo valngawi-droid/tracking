@@ -4,11 +4,11 @@
  * Hand Tracking — MediaPipe Tasks (JavaScript/WASM)
  * Berjalan 100% di browser HP (Android/Chrome), model & runtime lokal.
  *
- * Optimasi kecepatan (biar tidak "lama banget" di HP):
- *  - Progress bar bertahap saat loading (unduh → init → pemanasan).
- *  - Pemanasan (warmup) setelah model siap → frame pertama tidak nge-lag.
- *  - GPU dengan fallback otomatis ke CPU (HP lama tanpa WebGL2 tetap jalan).
- *  - Interval deteksi adaptif: otomatis dikurangi bila HP lambat.
+ * Optimasi kecepatan & tampilan:
+ *  - Rasio kanvas mengikuti rasio asli kamera → gambar TIDAK gepeng/ke-stretch.
+ *  - Mode cermin default MATI (gambar asli); bisa dinyalakan manual.
+ *  - Progress bar bertahap saat loading + pemanasan model.
+ *  - Interval deteksi adaptif + input downscale otomatis untuk HP lambat.
  *  - Panel hasil hanya di-update saat gestur berubah (hemat CPU/DOM).
  * ========================================================================= */
 
@@ -17,6 +17,7 @@ import { FilesetResolver, HandLandmarker } from './mediapipe/vision.js';
 const video     = document.getElementById('video');
 const canvas    = document.getElementById('canvas');
 const ctx       = canvas.getContext('2d');
+const videoWrap = document.querySelector('.video-wrap');
 const hint      = document.getElementById('overlay-hint');
 const hintTitle = document.getElementById('hint-title');
 const hintDetail= document.getElementById('hint-detail');
@@ -34,10 +35,11 @@ const btnDemo   = document.getElementById('btn-demo');
 const mirrorEl  = document.getElementById('mirror');
 const skeletonEl= document.getElementById('skeleton');
 
-const W = 640, H = 480;
-canvas.width = W; canvas.height = H;
+// Ukuran kanvas mengikuti video asli (default 640x480 sebelum kamera nyala).
+let videoW = 640, videoH = 480;
+canvas.width = videoW; canvas.height = videoH;
 
-// Canvas kecil untuk input deteksi di HP lambat (320x240 cukup untuk model).
+// Canvas kecil untuk input deteksi di HP lambat (huruf "berat" dikurangi).
 const detectCanvas = document.createElement('canvas');
 detectCanvas.width = 320; detectCanvas.height = 240;
 const detectCtx = detectCanvas.getContext('2d');
@@ -127,6 +129,21 @@ function handednessOf(result, i) {
   return raw === 'Left' ? 'Kiri' : (raw === 'Right' ? 'Kanan' : 'Unknown');
 }
 
+/* ---------------------- ukuran kanvas sesuai video ---------------------- */
+
+function syncVideoSize() {
+  const vw = video.videoWidth || 0;
+  const vh = video.videoHeight || 0;
+  if (!vw || !vh) return;
+  // Batasi lebar maksimal 640 agar tetap ringan, rasio dijaga (tidak gepeng).
+  const scale = Math.min(1, 640 / vw);
+  videoW = Math.max(2, Math.round(vw * scale));
+  videoH = Math.max(2, Math.round(vh * scale));
+  canvas.width = videoW;
+  canvas.height = videoH;
+  if (videoWrap) videoWrap.style.aspectRatio = videoW + ' / ' + videoH;
+}
+
 /* --------------------------- inisialisasi --------------------------- */
 
 async function initModel() {
@@ -174,8 +191,7 @@ async function createWithFallback() {
   }
 }
 
-// Pemanasan: jalankan satu deteksi kecil supaya kompilasi shader/graph
-// selesai sekarang, bukan di frame kamera pertama (yang bikin terasa macet).
+// Pemanasan: satu deteksi kecil supaya kompilasi selesai sebelum kamera nyala.
 async function warmup(lm) {
   setProgress(80, 'Pemanasan model…', '');
   detectCtx.fillStyle = '#000';
@@ -212,6 +228,7 @@ async function startCamera() {
     });
     video.srcObject = stream;
     await video.play();
+    syncVideoSize();
     running = true;
     hint.style.display = 'none';
     btnStart.disabled = true;
@@ -229,7 +246,8 @@ async function startCamera() {
 
 async function switchCamera() {
   facingMode = facingMode === 'user' ? 'environment' : 'user';
-  mirrorEl.checked = facingMode === 'user'; // kamera belakang tidak dicerminkan
+  // Kamera belakang tidak dicerminkan (gambar asli).
+  if (facingMode === 'environment') mirrorEl.checked = false;
   if (stream) stream.getTracks().forEach(t => t.stop());
   stream = null;
   await startCamera();
@@ -262,11 +280,18 @@ async function testImage() {
   stopCamera();
   const img = new Image();
   img.onload = async () => {
+    // Kanvas mengikuti ukuran gambar (tidak gepeng).
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    if (iw && ih) {
+      videoW = iw; videoH = ih;
+      canvas.width = videoW; canvas.height = videoH;
+      if (videoWrap) videoWrap.style.aspectRatio = videoW + ' / ' + videoH;
+    }
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, videoW, videoH);
     ctx.save();
-    if (mirrorEl.checked) { ctx.translate(W, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(img, 0, 0, W, H);
+    if (mirrorEl.checked) { ctx.translate(videoW, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(img, 0, 0, videoW, videoH);
     ctx.restore();
 
     try {
@@ -291,9 +316,9 @@ function loop() {
 
   ctx.save();
   ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, W, H);
-  if (mirrorEl.checked) { ctx.translate(W, 0); ctx.scale(-1, 1); }
-  if (video.readyState >= 2) ctx.drawImage(video, 0, 0, W, H);
+  ctx.fillRect(0, 0, videoW, videoH);
+  if (mirrorEl.checked) { ctx.translate(videoW, 0); ctx.scale(-1, 1); }
+  if (video.readyState >= 2) ctx.drawImage(video, 0, 0, videoW, videoH);
   ctx.restore();
 
   const now = performance.now();
@@ -307,13 +332,11 @@ function loop() {
     lastDetect = now;
     const t0 = performance.now();
     try {
-      // HP lambat → pakai canvas kecil sebagai input (lebih ringan).
       const src = lastLatency > 150 ? downscaledFrame() : video;
       const result = landmarker.detectForVideo(src, now);
       lastLatency = performance.now() - t0;
       latencyEl.textContent = 'Deteksi: ' + lastLatency.toFixed(0) + ' ms';
       detectErrors = 0;
-      // Interval adaptif: biar UI tetap halus di HP lemot.
       detectEvery = lastLatency > 66 ? Math.min(500, Math.round(lastLatency * 1.4)) : 33;
       lastResult = result;
       updatePanel(result);
@@ -327,8 +350,14 @@ function loop() {
   rafId = requestAnimationFrame(loop);
 }
 
+// Input kecil dengan rasio dijaga (letterbox) untuk HP lambat.
 function downscaledFrame() {
-  detectCtx.drawImage(video, 0, 0, 320, 240);
+  detectCtx.fillStyle = '#000';
+  detectCtx.fillRect(0, 0, 320, 240);
+  const vw = video.videoWidth || videoW, vh = video.videoHeight || videoH;
+  const r = Math.min(320 / vw, 240 / vh);
+  const dw = vw * r, dh = vh * r;
+  detectCtx.drawImage(video, (320 - dw) / 2, (240 - dh) / 2, dw, dh);
   return detectCanvas;
 }
 
@@ -340,8 +369,8 @@ function drawOverlay() {
   lastResult.handLandmarks.forEach((lm, i) => drawHand(lm, i, mirrored));
 }
 
-function px(lm, mirrored) { return (mirrored ? 1 - lm.x : lm.x) * W; }
-function py(lm) { return lm.y * H; }
+function px(lm, mirrored) { return (mirrored ? 1 - lm.x : lm.x) * videoW; }
+function py(lm) { return lm.y * videoH; }
 
 function drawHand(lm, i, mirrored) {
   if (!lm || lm.length < 21) return;
@@ -433,7 +462,7 @@ function renderHands(result) {
 
 function snapshot() {
   const out = document.createElement('canvas');
-  out.width = W; out.height = H;
+  out.width = videoW; out.height = videoH;
   const octx = out.getContext('2d');
   octx.drawImage(canvas, 0, 0);
   const a = document.createElement('a');
@@ -445,6 +474,8 @@ function snapshot() {
 }
 
 /* ------------------------------ event ------------------------------ */
+
+video.addEventListener('loadedmetadata', syncVideoSize);
 
 btnStart.addEventListener('click', startCamera);
 btnSwitch.addEventListener('click', switchCamera);
