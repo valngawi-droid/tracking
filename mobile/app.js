@@ -2,8 +2,14 @@
 
 /* =========================================================================
  * Hand Tracking — MediaPipe Tasks (JavaScript/WASM)
- * Berjalan 100% di browser HP (Android/Chrome), model & runtime lokal
- * (tidak butuh internet saat dipakai, cukup server lokal dari Termux).
+ * Berjalan 100% di browser HP (Android/Chrome), model & runtime lokal.
+ *
+ * Optimasi kecepatan (biar tidak "lama banget" di HP):
+ *  - Progress bar bertahap saat loading (unduh → init → pemanasan).
+ *  - Pemanasan (warmup) setelah model siap → frame pertama tidak nge-lag.
+ *  - GPU dengan fallback otomatis ke CPU (HP lama tanpa WebGL2 tetap jalan).
+ *  - Interval deteksi adaptif: otomatis dikurangi bila HP lambat.
+ *  - Panel hasil hanya di-update saat gestur berubah (hemat CPU/DOM).
  * ========================================================================= */
 
 import { FilesetResolver, HandLandmarker } from './mediapipe/vision.js';
@@ -14,6 +20,7 @@ const ctx       = canvas.getContext('2d');
 const hint      = document.getElementById('overlay-hint');
 const hintTitle = document.getElementById('hint-title');
 const hintDetail= document.getElementById('hint-detail');
+const progressBar = document.getElementById('progress-bar');
 const handsEl   = document.getElementById('hands');
 const emptyEl   = document.getElementById('empty');
 const statusEl  = document.getElementById('status');
@@ -27,13 +34,15 @@ const btnDemo   = document.getElementById('btn-demo');
 const mirrorEl  = document.getElementById('mirror');
 const skeletonEl= document.getElementById('skeleton');
 
-let fileset = null;
-let imageLandmarker = null;
-
 const W = 640, H = 480;
 canvas.width = W; canvas.height = H;
 
-// Kerangka tangan per jari (warna berbeda) — sama seperti versi desktop.
+// Canvas kecil untuk input deteksi di HP lambat (320x240 cukup untuk model).
+const detectCanvas = document.createElement('canvas');
+detectCanvas.width = 320; detectCanvas.height = 240;
+const detectCtx = detectCanvas.getContext('2d');
+
+// Kerangka tangan per jari (warna berbeda).
 const HAND_PARTS = [
   { color: '#22c55e', bones: [[0,1],[1,2],[2,3],[3,4]] },           // jempol
   { color: '#00e5ff', bones: [[0,5],[5,6],[6,7],[7,8]] },           // telunjuk
@@ -47,23 +56,34 @@ const FINGER_TIPS = { jempol: 4, telunjuk: 8, tengah: 12, manis: 16, kelingking:
 const FINGER_PIPS = { jempol: 3, telunjuk: 6, tengah: 10, manis: 14, kelingking: 18 };
 const PINCH_THRESHOLD = 0.05;
 
-let landmarker = null;
+let fileset = null;
+let landmarker = null;       // mode VIDEO (kamera)
+let imageLandmarker = null;  // mode IMAGE (uji gambar)
 let stream = null;
-let facingMode = 'user';   // 'user' = kamera depan, 'environment' = belakang
+let facingMode = 'user';
 let running = false;
 let rafId = null;
 let lastDetect = 0;
-let detectEvery = 33;      // ~30 fps deteksi
+let detectEvery = 33;        // ms antar deteksi (adaptif)
 let lastResult = null;
+let lastLatency = 0;
+let detectErrors = 0;
+let recovering = false;
 
 let fpsFrames = 0, fpsLast = performance.now();
-let lastLatency = 0;
+let lastNames = '\u0000';    // untuk update panel hanya saat gestur berubah
 
 /* ------------------------------ util ------------------------------ */
 
 function setStatus(text, ok) {
   statusEl.textContent = text;
   statusEl.className = ok === false ? 'err' : 'ok';
+}
+
+function setProgress(pct, title, detail) {
+  progressBar.style.width = pct + '%';
+  hintTitle.textContent = title;
+  if (detail) hintDetail.textContent = detail;
 }
 
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
@@ -81,7 +101,7 @@ function fingerStates(lm) {
   return s;
 }
 
-function recognize(lm, handedness) {
+function recognize(lm) {
   const st = fingerStates(lm);
   const up = Object.entries(st).filter(([, v]) => v).map(([k]) => k);
   const count = up.length;
@@ -102,41 +122,81 @@ function recognize(lm, handedness) {
   return { name: 'Lima / Terbuka', emoji: '🖐️', count, up };
 }
 
+function handednessOf(result, i) {
+  const raw = result.handedness?.[i]?.categories?.[0]?.categoryName;
+  return raw === 'Left' ? 'Kiri' : (raw === 'Right' ? 'Kanan' : 'Unknown');
+}
+
 /* --------------------------- inisialisasi --------------------------- */
 
 async function initModel() {
-  hintTitle.textContent = 'Memuat model…';
-  hintDetail.textContent = 'Mengambil runtime WASM & hand_landmarker.task';
   try {
+    setProgress(5, 'Mengunduh runtime…', 'mediapipe WASM (~12 MB)');
     fileset = await FilesetResolver.forVisionTasks('mediapipe/wasm');
 
-    const create = (delegate) => HandLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: 'hand_landmarker.task', delegate },
-      runningMode: 'VIDEO',
-      numHands: 2,
-      minHandDetectionConfidence: 0.5,
-      minHandPresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
+    setProgress(40, 'Menyiapkan model…', 'hand_landmarker.task (~8 MB)');
+    landmarker = await createWithFallback();
 
-    // Coba GPU (lebih cepat); jika HP tidak mendukung WebGL2, fallback ke CPU.
-    try {
-      landmarker = await create('GPU');
-    } catch (eGpu) {
-      console.warn('GPU tidak tersedia, memakai CPU:', eGpu);
-      landmarker = await create('CPU');
-    }
-
-    hintTitle.textContent = 'Model siap! 🎉';
-    hintDetail.textContent = 'Tekan "Mulai Kamera", lalu tunjukkan tanganmu.';
+    setProgress(100, 'Model siap! 🎉', 'Tekan "Mulai Kamera", lalu tunjukkan tangan.');
     setStatus('MediaPipe siap — tekan Mulai Kamera', true);
     btnStart.disabled = false;
     btnDemo.disabled = false;
   } catch (e) {
     console.error(e);
-    hintTitle.textContent = 'Gagal memuat model';
+    setProgress(0, 'Gagal memuat model', '');
     hintDetail.textContent = 'Pastikan file mediapipe/ & hand_landmarker.task ada.';
     setStatus('Gagal memuat model: ' + e.message, false);
+  }
+}
+
+function makeLandmarker(delegate) {
+  return HandLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: 'hand_landmarker.task', delegate },
+    runningMode: 'VIDEO',
+    numHands: 2,
+    minHandDetectionConfidence: 0.5,
+    minHandPresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  });
+}
+
+// GPU lebih cepat; bila tidak tersedia, otomatis pindah ke CPU.
+async function createWithFallback() {
+  try {
+    setProgress(60, 'Mengaktifkan GPU…', '');
+    const g = await makeLandmarker('GPU');
+    await warmup(g);
+    return g;
+  } catch (eGpu) {
+    console.warn('GPU tidak tersedia, memakai CPU:', eGpu);
+    setProgress(70, 'GPU tidak ada — memakai CPU…', '');
+    return makeLandmarker('CPU');
+  }
+}
+
+// Pemanasan: jalankan satu deteksi kecil supaya kompilasi shader/graph
+// selesai sekarang, bukan di frame kamera pertama (yang bikin terasa macet).
+async function warmup(lm) {
+  setProgress(80, 'Pemanasan model…', '');
+  detectCtx.fillStyle = '#000';
+  detectCtx.fillRect(0, 0, 320, 240);
+  lm.detectForVideo(detectCanvas, 0);
+}
+
+async function recoverWithCpu() {
+  if (recovering) return;
+  recovering = true;
+  try {
+    setStatus('Mengganti ke CPU…', true);
+    try { landmarker.close(); } catch (_) {}
+    landmarker = await makeLandmarker('CPU');
+    detectErrors = 0;
+    setStatus('Kamera aktif (CPU)', true);
+  } catch (e) {
+    console.error(e);
+    setStatus('Gagal mengganti ke CPU: ' + e.message, false);
+  } finally {
+    recovering = false;
   }
 }
 
@@ -147,7 +207,7 @@ async function startCamera() {
   try {
     if (stream) stream.getTracks().forEach(t => t.stop());
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+      video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
       audio: false,
     });
     video.srcObject = stream;
@@ -157,11 +217,11 @@ async function startCamera() {
     btnStart.disabled = true;
     btnSwitch.disabled = false;
     btnSnap.disabled = false;
-    setStatus('Kamera aktif — lacak tangan ke kamera', true);
+    setStatus('Kamera aktif — tunjukkan tangan ke kamera', true);
     loop();
   } catch (e) {
     setStatus('Kamera tidak tersedia: ' + e.message, false);
-    hintTitle.textContent = 'Kamera tidak tersedia';
+    setProgress(100, 'Kamera tidak tersedia', '');
     hintDetail.textContent = 'Izinkan akses kamera lalu coba lagi.';
     hint.style.display = 'flex';
   }
@@ -169,8 +229,7 @@ async function startCamera() {
 
 async function switchCamera() {
   facingMode = facingMode === 'user' ? 'environment' : 'user';
-  // Kamera belakang tidak dicerminkan (gambar asli).
-  mirrorEl.checked = facingMode === 'user';
+  mirrorEl.checked = facingMode === 'user'; // kamera belakang tidak dicerminkan
   if (stream) stream.getTracks().forEach(t => t.stop());
   stream = null;
   await startCamera();
@@ -203,7 +262,6 @@ async function testImage() {
   stopCamera();
   const img = new Image();
   img.onload = async () => {
-    // Gambar digambar (dicerminkan bila mode cermin aktif) agar overlay konsisten.
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
     ctx.save();
@@ -216,7 +274,8 @@ async function testImage() {
       lastResult = lmr.detect(img);
       renderHands(lastResult);
       drawOverlay();
-      setStatus('Gambar diuji — ' + (lastResult.handLandmarks?.length || 0) + ' tangan terdeteksi', true);
+      const n = lastResult.handLandmarks?.length || 0;
+      setStatus('Gambar diuji — ' + n + ' tangan terdeteksi', true);
     } catch (e) {
       console.error(e);
       setStatus('Gagal menguji gambar: ' + e.message, false);
@@ -230,7 +289,6 @@ async function testImage() {
 function loop() {
   if (!running) return;
 
-  // Gambar video (dicerminkan bila mode cermin aktif).
   ctx.save();
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
@@ -245,23 +303,36 @@ function loop() {
     fpsFrames = 0; fpsLast = now;
   }
 
-  if (now - lastDetect >= detectEvery && landmarker) {
+  if (landmarker && !recovering && now - lastDetect >= detectEvery) {
     lastDetect = now;
     const t0 = performance.now();
     try {
-      const result = landmarker.detectForVideo(video, now);
+      // HP lambat → pakai canvas kecil sebagai input (lebih ringan).
+      const src = lastLatency > 150 ? downscaledFrame() : video;
+      const result = landmarker.detectForVideo(src, now);
       lastLatency = performance.now() - t0;
       latencyEl.textContent = 'Deteksi: ' + lastLatency.toFixed(0) + ' ms';
+      detectErrors = 0;
+      // Interval adaptif: biar UI tetap halus di HP lemot.
+      detectEvery = lastLatency > 66 ? Math.min(500, Math.round(lastLatency * 1.4)) : 33;
       lastResult = result;
-      renderHands(result);
+      updatePanel(result);
     } catch (e) {
       console.error(e);
+      if (++detectErrors >= 3) recoverWithCpu();
     }
   }
 
   drawOverlay();
   rafId = requestAnimationFrame(loop);
 }
+
+function downscaledFrame() {
+  detectCtx.drawImage(video, 0, 0, 320, 240);
+  return detectCanvas;
+}
+
+/* ------------------------------ gambar ------------------------------ */
 
 function drawOverlay() {
   if (!lastResult || !lastResult.handLandmarks) return;
@@ -275,13 +346,11 @@ function py(lm) { return lm.y * H; }
 function drawHand(lm, i, mirrored) {
   if (!lm || lm.length < 21) return;
 
-  // Data jari & gestur
   const fingers = fingerStates(lm);
-  const handednessRaw = lastResult.handedness?.[i]?.categories?.[0]?.categoryName || 'Unknown';
+  const side = handednessOf(lastResult, i);
   // Saat dicerminkan, kiri/kanan tertukar secara visual.
-  const side = handednessRaw === 'Left' ? 'Kiri' : (handednessRaw === 'Right' ? 'Kanan' : 'Unknown');
   const labelSide = mirrored ? (side === 'Kiri' ? 'Kanan' : (side === 'Kanan' ? 'Kiri' : side)) : side;
-  const gesture = recognize(lm, labelSide);
+  const gesture = recognize(lm);
 
   if (skeletonEl.checked) {
     ctx.lineCap = 'round';
@@ -324,6 +393,20 @@ function drawHand(lm, i, mirrored) {
 
 /* ------------------------------ panel ------------------------------ */
 
+// Update panel hanya saat gestur berubah → hemat CPU di HP.
+function updatePanel(result) {
+  const hands = result.handLandmarks || [];
+  if (!hands.length) {
+    if (lastNames !== '') { lastNames = ''; renderHands(result); }
+    return;
+  }
+  const names = hands.map((lm, i) => recognize(lm).name + handednessOf(result, i)).join('|');
+  if (names !== lastNames) {
+    lastNames = names;
+    renderHands(result);
+  }
+}
+
 function renderHands(result) {
   const hands = result.handLandmarks || [];
   if (!hands.length) {
@@ -334,9 +417,8 @@ function renderHands(result) {
   emptyEl.style.display = 'none';
   handsEl.innerHTML = hands.map((lm, i) => {
     const st = fingerStates(lm);
-    const raw = result.handedness?.[i]?.categories?.[0]?.categoryName || 'Unknown';
-    const side = raw === 'Left' ? 'Kiri' : (raw === 'Right' ? 'Kanan' : 'Unknown');
-    const g = recognize(lm, side);
+    const side = handednessOf(result, i);
+    const g = recognize(lm);
     const list = Object.entries(st)
       .map(([k, v]) => `<span class="finger ${v ? 'up' : 'down'}">${v ? '▲' : '▼'} ${k}</span>`)
       .join('');

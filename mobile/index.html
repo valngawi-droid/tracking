@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0f1420" />
   <title>Hand Tracking — MediaPipe (Android)</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
   <header>
@@ -19,7 +19,8 @@
         <video id="video" autoplay playsinline muted></video>
         <canvas id="canvas"></canvas>
         <div id="overlay-hint" class="hint">
-          <div class="hint-title">Memuat model…</div>
+          <div class="hint-title" id="hint-title">Memuat model…</div>
+          <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
           <div id="hint-detail" class="hint-detail">Menyiapkan MediaPipe &amp; WASM</div>
         </div>
       </div>
@@ -54,6 +55,6 @@
     Frontend: MediaPipe JS (WASM) · Server: <b>PHP</b> di Termux · Tidak butuh PC
   </footer>
 
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=3"></script>
 </body>
 </html>
