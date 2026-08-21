@@ -1,62 +1,78 @@
-# 🖐️ Hand Tracking — MediaPipe (Python + PHP)
+# 🖐️ Hand Tracking — MediaPipe (bisa jalan di HP / Termux)
 
-Aplikasi web untuk **mendeteksi & melacak tangan** secara real-time menggunakan
-[MediaPipe Hands](https://developers.google.com/mediapipe/solutions/vision/hand_landmarker).
+Aplikasi **deteksi & pelacakan tangan** (21 titik landmark, kerangka berwarna,
+jumlah jari, gestur) dengan [MediaPipe](https://developers.google.com/mediapipe).
 
-Stack yang dipakai:
+Proyek ini menyediakan **dua versi** agar bisa dipakai **tanpa laptop/PC**:
 
-| Lapisan  | Teknologi | Peran |
-|----------|-----------|-------|
-| Backend  | **Python** (Flask + MediaPipe) | Deteksi 21 titik landmark tangan, handedness (kiri/kanan), dan pengenalan gestur |
-| Frontend | **PHP** (+ HTML/JS/CSS) | Menyajikan halaman kamera & menjadi *bridge* (`/api/*` → Python) |
+| Versi | Cocok untuk | Cara jalan |
+|-------|-------------|------------|
+| 📱 **`mobile/`** — MediaPipe JavaScript (WASM) | **HP Android via Termux** (atau browser apa pun) | Server lokal PHP di Termux → buka `http://localhost:8080` di Chrome |
+| 💻 **`frontend/` + `backend/`** — Python (Flask+MediaPipe) + PHP | Komputer/PC dengan webcam | `python backend/app.py` + `php -S ...` |
 
-```
-Browser ──▶ PHP (index.php, api.php) ──▶ Python (Flask + MediaPipe Hands)
-                 ▲                                  │
-                 └────────── JSON hasil ────────────┘
-```
-
----
-
-## ✨ Fitur
-
-- Deteksi **hingga 2 tangan** sekaligus (21 landmark per tangan).
-- **Handedness**: menebak tangan kiri/kanan + skor keyakinan.
-- **Pengenalan gestur sederhana** (jumlah jari terangkat): 👍 Jempol, ☝️ Satu,
-  ✌️ Dua/Victory, 🤟 Tiga, ✊ Kepalan, 🖐️ Tangan terbuka, 👌 OK/Jepit.
-- Overlay **kerangka tangan** (garis-garis berwarna per jari + titik landmark)
-  langsung di atas video/gambar — sama seperti visualisasi hand-tracking pada umumnya.
-- Sumber input: **webcam**, **unggah gambar**, atau **gambar demo** bawaan.
-- Tampilan data mentah (JSON) di panel samping.
-
-## 📁 Struktur Proyek
-
-```
-tracking/
-├── backend/                 # Bagian Python
-│   ├── app.py               # API Flask (endpoint /api/health, /api/track)
-│   ├── hand_tracker.py      # Deteksi tangan dengan MediaPipe
-│   ├── gesture.py           # Logika jari terangkat & pengenalan gestur
-│   ├── track_image.py       # CLI: deteksi tangan dari file gambar → JSON
-│   └── requirements.txt
-├── frontend/                # Bagian PHP
-│   ├── index.php            # Halaman utama (webcam + overlay)
-│   ├── api.php              # Bridge PHP → Python (proxy /api/*)
-│   ├── router.php           # Router untuk `php -S`
-│   └── assets/
-│       ├── app.js           # Logika frontend (kamera, overlay, fetch)
-│       ├── style.css
-│       └── sample.jpg       # Gambar demo
-└── README.md
-```
+> **Kenapa versi HP pakai JavaScript?** Paket Python `mediapipe` hanya tersedia
+> untuk komputer (Windows/Linux glibc), **tidak bisa diinstal di Termux/Android**.
+> Solusi standarnya: jalankan **MediaPipe versi JavaScript/WASM** — model & hasilnya
+> **identik** (21 landmark + kerangka yang sama), tapi berjalan langsung di browser HP.
+> File model (`hand_landmarker.task`) & runtime WASM-nya sudah disertakan di repo,
+> jadi tidak perlu unduh apa pun lagi.
 
 ---
 
-## 🚀 Cara Menjalankan
+## 📱 Cara pakai di HP (Termux, tanpa PC)
 
-### 1. Backend Python
+Yang dibutuhkan hanya **Termux** (disarankan dari [F-Droid](https://f-droid.org/packages/com.termux/))
+dan **Chrome**.
 
-Butuh **Python 3.9+**. Jalankan di folder `backend/` (atau dari root):
+```bash
+# 1) Install Termux, buka, lalu jalankan:
+pkg update
+pkg install git
+
+# 2) Clone repo ini
+git clone https://github.com/valngawi-droid/tracking.git
+cd tracking
+
+# 3) Setup & jalankan (otomatis install PHP + start server)
+bash termux-setup.sh
+```
+
+Lalu **buka Chrome** di HP, ketik:
+
+```
+http://localhost:8080
+```
+
+Izinkan akses kamera → tunjukkan tangan ke kamera → kerangka tangan berwarna
+langsung muncul. Selesai. 🎉
+
+Perintah berguna:
+
+| Perintah | Fungsi |
+|----------|--------|
+| `bash termux-setup.sh` | Install PHP + jalankan server (sekali saja) |
+| `bash termux-run.sh`   | Jalankan ulang server (untuk pemakaian berikutnya) |
+| `CTRL+C`               | Hentikan server |
+
+### Fitur versi HP
+
+- Kamera **depan/belakang** (tombol 🔄) + mode cermin otomatis.
+- Kerangka tangan **berwarna per jari** + titik landmark.
+- Deteksi **2 tangan** sekaligus, handedness (Kiri/Kanan), jumlah jari & gestur
+  (👍 Jempol, ✌️ Victory, ✊ Kepalan, 🖐️ Terbuka, 👌 OK, dll.).
+- **🧪 Uji Gambar** — tes deteksi tanpa kamera (pakai gambar demo).
+- **📸 Simpan Foto** — unduh hasil tangkapan + overlay.
+
+> **Tips:** saat pertama kali, tekan **🧪 Uji Gambar** dulu untuk memastikan model
+> termuat dengan benar sebelum mengizinkan kamera.
+
+---
+
+## 💻 Cara pakai di PC (Python + PHP)
+
+### 1. Backend Python (Flask + MediaPipe)
+
+Butuh **Python 3.9+**:
 
 ```bash
 # dari root proyek
@@ -67,83 +83,87 @@ pip install -r backend/requirements.txt
 python backend/app.py                # default http://0.0.0.0:8000
 ```
 
-> **Catatan untuk Linux**: MediaPipe/OpenCV membutuhkan `libGL`. Jika muncul
-> error `libGL.so.1: cannot open shared object file`, pasang:
-> ```bash
-> sudo apt-get install -y libgl1 libglib2.0-0
-> ```
-> Gunakan `opencv-python-headless` (sudah ada di `requirements.txt`) agar tidak
-> memerlukan tampilan GUI.
+> **Linux**: kalau muncul `libGL.so.1: cannot open shared object file`:
+> `sudo apt-get install -y libgl1 libglib2.0-0`
 
-Cek backend: buka <http://127.0.0.1:8000/api/health> → balasan JSON `{"status":"ok", ...}`.
+Cek: <http://127.0.0.1:8000/api/health> → `{"status":"ok", ...}`.
 
 ### 2. Frontend PHP
 
-Butuh **PHP 7.4+** (ekstensi `curl` disarankan, kalau tidak ada otomatis pakai
-`file_get_contents`). Dari root proyek:
+Butuh **PHP 7.4+**:
 
 ```bash
 php -S 0.0.0.0:8080 -t frontend frontend/router.php
 ```
 
-Buka <http://localhost:8080>, izinkan akses kamera, lalu mainkan.
+Buka <http://localhost:8080>, izinkan kamera. PHP akan meneruskan request
+`/api/*` ke backend Python (jembatan `frontend/api.php`).
 
-> **Alternatif (XAMPP / LAMP)**: salin isi folder `frontend/` ke `htdocs` (atau
-> `www`), pastikan `PYTHON_API_URL` menunjuk ke backend Python (misal
-> `http://127.0.0.1:8000`). Anda bisa mengaturnya lewat environment variable
-> atau langsung di bagian atas `frontend/api.php`.
-
-### 3. Mode cepat tanpa PHP (opsional)
-
-Backend Flask juga bisa menyajikan halaman frontend-nya sendiri, berguna untuk
-pengujian cepat:
+### 3. Tanpa PHP (uji cepat)
 
 ```bash
-python backend/app.py          # lalu buka http://localhost:8000
+python backend/app.py          # backend juga bisa menyajikan halaman frontend
+# buka http://localhost:8000
 ```
-
-Di mode ini `/api/*` langsung ditangani Flask (tanpa melewati PHP).
 
 ---
 
-## 🔌 API
+## 📁 Struktur Proyek
 
-### `GET /api/health`
-
-```json
-{ "status": "ok", "python": "3.11.2", "mediapipe": "0.10.21", "model": "MediaPipe Hands" }
+```
+tracking/
+├── mobile/                   # 📱 Versi HP (MediaPipe JS, self-contained)
+│   ├── index.html            # Halaman utama (kamera + overlay)
+│   ├── app.js                # Logika kamera, deteksi, gambar kerangka
+│   ├── style.css
+│   ├── serve.php             # Router MIME untuk php -S (opsional)
+│   ├── serve.py              # Server statis alternatif (tanpa PHP)
+│   ├── sample.jpg            # Gambar demo (uji tanpa kamera)
+│   ├── hand_landmarker.task  # Model MediaPipe (bundled)
+│   └── mediapipe/
+│       ├── vision.js         # Runtime MediaPipe Tasks (ESM)
+│       └── wasm/             # vision_wasm_*.js / *.wasm (bundled)
+│
+├── backend/                  # 💻 Python: Flask + MediaPipe Hands
+│   ├── app.py                # API: /api/health, /api/track
+│   ├── hand_tracker.py       # Deteksi landmark + handedness
+│   ├── gesture.py            # Logika jari & gestur
+│   ├── track_image.py        # CLI deteksi gambar → JSON
+│   └── requirements.txt
+│
+├── frontend/                 # 💻 PHP: halaman kamera + bridge ke Python
+│   ├── index.php
+│   ├── api.php               # Proxy /api/* → Python
+│   ├── router.php
+│   └── assets/ (app.js, style.css, sample.jpg)
+│
+├── termux-setup.sh           # Setup + jalankan di Termux
+├── termux-run.sh             # Jalankan ulang server di Termux
+└── README.md
 ```
 
-### `POST /api/track`
+---
 
-Body JSON berisi gambar dalam bentuk base64 (boleh dengan prefix
-`data:image/jpeg;base64,`):
+## 🔌 API versi PC (Python)
 
-```json
-{ "image": "<base64 jpeg>" }
-```
-
-Respon:
+- `GET /api/health` → status backend.
+- `POST /api/track` → body `{"image": "<base64 jpeg>"}` → hasil deteksi:
 
 ```json
 {
-  "hands": [
-    {
-      "handedness": "Kiri",
-      "handedness_raw": "Left",
-      "score": 0.98,
-      "landmarks": [ { "x": 0.47, "y": 0.86, "z": 0.0 }, "… 21 titik" ],
-      "fingers": { "jempol": true, "telunjuk": true, "tengah": true, "manis": true, "kelingking": true },
-      "gesture": { "name": "Lima / Terbuka", "emoji": "🖐️", "count": 5, "fingers_up": ["jempol", "telunjuk", "tengah", "manis", "kelingking"] }
-    }
-  ],
+  "hands": [{
+    "handedness": "Kiri",
+    "score": 0.98,
+    "landmarks": [ { "x": 0.47, "y": 0.86, "z": 0.0 }, "…21 titik" ],
+    "fingers": { "jempol": true, "telunjuk": true, "tengah": true, "manis": true, "kelingking": true },
+    "gesture": { "name": "Lima / Terbuka", "emoji": "🖐️", "count": 5 }
+  }],
   "elapsed_ms": 27.7,
-  "width": 640,
-  "height": 480
+  "width": 640, "height": 480
 }
 ```
 
-### CLI (tanpa server)
+CLI tanpa server:
 
 ```bash
 python backend/track_image.py gambar.jpg --pretty
@@ -151,27 +171,21 @@ python backend/track_image.py gambar.jpg --pretty
 
 ---
 
-## 🗂️ Catatan Gestur
-
-Deteksi jari "terangkat" memakai **perbandingan jarak** antar-landmark (bukan
-koordinat mentah) sehingga relatif tahan terhadap rotasi tangan. Nilai ambangnya
-ada di `backend/gesture.py` dan bisa disetel sesuai kebutuhan.
-
----
-
 ## 🛠️ Troubleshooting
 
 | Masalah | Solusi |
 |---------|--------|
-| `libGL.so.1: cannot open shared object file` | `sudo apt-get install -y libgl1 libglib2.0-0` |
-| `module 'mediapipe' has no attribute 'solutions'` | Gunakan `mediapipe<1.0` (mis. `mediapipe==0.10.21`), karena v1.x memakai Tasks API |
-| Kamera tidak muncul di browser | Pastikan halaman diakses via `http://localhost`/HTTPS, dan izinkan kamera di browser |
-| `Backend Python tidak dapat dihubungi` | Pastikan `python backend/app.py` berjalan di port 8000, atau set `PYTHON_API_URL` |
-| `allow_url_fopen = Off` | Aktifkan ekstensi `curl` di `php.ini`, atau set `allow_url_fopen = On` |
+| Kamera tidak muncul di Chrome HP | Akses **http://localhost:8080** (bukan 0.0.0.0); izinkan kamera |
+| Model tidak termuat (spinner terus) | Cek file `hand_landmarker.task` & `mediapipe/` ada; coba refresh |
+| `libGL.so.1 ...` (PC/Linux) | `sudo apt-get install -y libgl1 libglib2.0-0` |
+| `module 'mediapipe' has no attribute 'solutions'` | Pakai `mediapipe==0.10.21` (v1.x pakai Tasks API) |
+| Termux: `php: command not found` | `pkg install php` dulu |
+| Termux: server konflik port | Ubah port di `termux-run.sh` (mis. `8081`) |
 
 ---
 
-## 📄 Lisensi
+## 📄 Lisensi & kredit
 
-Contoh untuk keperluan edukasi. Gambar `frontend/assets/sample.jpg` berasal dari
-pencarian gambar publik (Dreamstime) dan hanya dipakai sebagai demo.
+Proyek edukasi. Model `hand_landmarker.task` adalah aset resmi **MediaPipe** (Google),
+runtime JavaScript dari paket npm `@mediapipe/tasks-vision`. Gambar `sample.jpg`
+berasal dari pencarian gambar publik dan hanya dipakai sebagai demo.

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#0f1420" />
+  <title>Hand Tracking — MediaPipe (Android)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>🖐️ Hand Tracking</h1>
+    <p class="sub">MediaPipe · berjalan 100% di HP (browser) — tanpa PC</p>
+  </header>
+
+  <main>
+    <section class="stage">
+      <div class="video-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+        <div id="overlay-hint" class="hint">
+          <div class="hint-title">Memuat model…</div>
+          <div id="hint-detail" class="hint-detail">Menyiapkan MediaPipe &amp; WASM</div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button id="btn-start">▶ Mulai Kamera</button>
+        <button id="btn-switch" disabled>🔄 Ganti Kamera</button>
+        <button id="btn-snap" disabled>📸 Simpan Foto</button>
+        <button id="btn-demo" disabled>🧪 Uji Gambar</button>
+      </div>
+
+      <div class="switches">
+        <label class="switch"><input id="mirror" type="checkbox" checked /> Mode cermin</label>
+        <label class="switch"><input id="skeleton" type="checkbox" checked /> Kerangka tangan</label>
+      </div>
+
+      <div class="status">
+        <span id="status">…</span>
+        <span id="fps">FPS: —</span>
+        <span id="latency">Latensi: —</span>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <h2>Hasil Deteksi</h2>
+      <div id="hands"></div>
+      <p id="empty" class="empty">Tunjukkan tangan ke kamera.</p>
+    </aside>
+  </main>
+
+  <footer>
+    Frontend: MediaPipe JS (WASM) · Server: <b>PHP</b> di Termux · Tidak butuh PC
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
