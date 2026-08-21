@@ -4,9 +4,9 @@
 #
 # Cara pakai (di Termux):
 #   1. Install Termux (disarankan dari F-Droid).
-#   2. Clone repo ini:
+#   2. Clone repo ini (perhatikan nama branch-nya!):
 #        pkg install git
-#        git clone https://github.com/valngawi-droid/tracking.git
+#        git clone -b arena/01a022b0-tracking https://github.com/valngawi-droid/tracking.git
 #        cd tracking
 #   3. Jalankan:
 #        bash termux-setup.sh

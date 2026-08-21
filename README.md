@@ -29,8 +29,8 @@ dan **Chrome**.
 pkg update
 pkg install git
 
-# 2) Clone repo ini
-git clone https://github.com/valngawi-droid/tracking.git
+# 2) Clone repo ini (perhatikan nama branch-nya!)
+git clone -b arena/01a022b0-tracking https://github.com/valngawi-droid/tracking.git
 cd tracking
 
 # 3) Setup & jalankan (otomatis install PHP + start server)
